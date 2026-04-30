@@ -7,31 +7,38 @@ the answer.
 
 ```
 +-------------------+        POST /api/chat        +--------------------+        +-------------+
-|  Next.js (3000)   |  ------------------------->  |  FastAPI (8000)    | -----> |  OpenAI API |
+|  Next.js (UI)     |  ------------------------->  |  FastAPI (api/)    | -----> |  OpenAI API |
 |  app/page.tsx     |  <-- { reply: "..." } -----  |  api/index.py      | <----- |  gpt-4o-mini|
 +-------------------+                              +--------------------+        +-------------+
 ```
 
 ## Stack
 
-- **Backend:** FastAPI + OpenAI Python SDK, Python 3.12, managed by [`uv`](https://github.com/astral-sh/uv)
+- **Backend:** FastAPI + OpenAI Python SDK, Python 3.12, managed by [`uv`](https://github.com/astral-sh/uv) locally
 - **Frontend:** Next.js 16 (App Router, TypeScript, Tailwind CSS)
 - **Notebook:** Jupyter playground for prompt iteration
 - **Model:** `gpt-4o-mini`
+- **Deploy:** Vercel (Next.js + Python serverless function under one URL)
 
 ## Project layout
 
 ```
 ai-engineering-proj/
 ├── api/
-│   ├── index.py            # FastAPI app, /api/chat endpoint
-│   └── README.md
-├── frontend/               # Next.js app
-│   └── app/page.tsx        # ELI5 UI
+│   └── index.py            # FastAPI app, /api/chat (also a Vercel Python function)
+├── app/                    # Next.js App Router
+│   ├── page.tsx            # ELI5 UI
+│   └── layout.tsx
+├── public/                 # static assets
 ├── notebooks/
 │   └── eli5_playground.ipynb
-├── pyproject.toml          # uv-managed Python deps
-├── .env.example            # OPENAI_API_KEY=sk-...
+├── package.json            # Next.js deps
+├── pyproject.toml          # uv-managed Python deps (local dev)
+├── requirements.txt        # Python deps for Vercel
+├── vercel.json             # /api/* -> api/index function
+├── next.config.ts
+├── tsconfig.json
+├── .env.example
 └── README.md
 ```
 
@@ -39,7 +46,7 @@ ai-engineering-proj/
 
 - Python 3.12 (auto-installed by `uv` if missing)
 - [`uv`](https://github.com/astral-sh/uv) (`brew install uv` or `pip install uv`)
-- Node.js 20+ and `npm` (install via [`nvm`](https://github.com/nvm-sh/nvm) if needed)
+- Node.js 20+ and `npm`
 - An OpenAI API key
 
 ## 1. Set your API key
@@ -49,38 +56,28 @@ cp .env.example .env
 # edit .env and replace sk-replace-me with your real OpenAI key
 ```
 
-## 2. Run the backend
+## 2. Run locally — backend
 
 ```bash
 uv sync
 uv run uvicorn api.index:app --reload
 ```
 
-Server: `http://localhost:8000` (interactive docs at `/docs`).
+Backend listens on `http://localhost:8000` (interactive docs at `/docs`).
 
-Quick test:
-
-```bash
-curl -X POST http://localhost:8000/api/chat \
-  -H 'Content-Type: application/json' \
-  -d '{"message":"What is gravity?"}'
-```
-
-## 3. Run the frontend
+## 3. Run locally — frontend
 
 In a second terminal:
 
 ```bash
-cd frontend
 npm install   # only the first time
+echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > .env.local
 npm run dev
 ```
 
-Open `http://localhost:3000`, type a question, hit **Explain**.
-
-By default the frontend talks to `http://localhost:8000`. To override, copy
-`frontend/.env.local.example` to `frontend/.env.local` and edit
-`NEXT_PUBLIC_API_URL`.
+Open `http://localhost:3000`. The `NEXT_PUBLIC_API_URL` override tells the
+frontend to talk to your local uvicorn server instead of the same-origin
+`/api/chat` (which is what's used in production on Vercel).
 
 ## 4. Optional: prompt prototyping in Jupyter
 
@@ -88,11 +85,26 @@ By default the frontend talks to `http://localhost:8000`. To override, copy
 uv run jupyter lab notebooks/eli5_playground.ipynb
 ```
 
-The notebook calls the same model and system prompt the backend uses, which
-makes it easy to iterate on the ELI5 prompt before changing `api/index.py`.
+## Deploying to Vercel
 
-## Deploying
+The repo is Vercel-ready. On every push to `main` Vercel will:
 
-Vercel deployment is intentionally out of scope here. To deploy later, install
-the Vercel CLI (`npm i -g vercel`) and run `vercel` from the project root; the
-official challenge repo's `vercel.json` is a good reference.
+1. Detect Next.js at the repo root and build/serve the frontend.
+2. Detect `api/index.py` and deploy it as a Python serverless function.
+3. Use `vercel.json` to forward any `/api/*` request to that function.
+
+You only need to set one environment variable in the Vercel project settings:
+
+```
+OPENAI_API_KEY = sk-...   # Production (and Preview, if desired)
+```
+
+Result:
+
+```
+https://<your-project>.vercel.app/          → Next.js page (ELI5 UI)
+https://<your-project>.vercel.app/api/chat  → FastAPI endpoint
+```
+
+No CORS configuration needed in production because both are served from the
+same origin.

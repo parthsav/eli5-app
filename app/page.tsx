@@ -2,8 +2,10 @@
 
 import { useState, type FormEvent } from "react";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// In production (Vercel) leave NEXT_PUBLIC_API_URL unset so the frontend
+// hits same-origin /api/chat. For local dev with separate uvicorn server,
+// set NEXT_PUBLIC_API_URL=http://localhost:8000 in .env.local.
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 export default function Home() {
   const [question, setQuestion] = useState("");
@@ -21,7 +23,7 @@ export default function Home() {
     setReply("");
 
     try {
-      const res = await fetch(`${API_URL}/api/chat`, {
+      const res = await fetch(`${API_BASE}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: trimmed }),
